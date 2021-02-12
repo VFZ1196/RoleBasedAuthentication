@@ -8,7 +8,10 @@ import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,8 +20,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.roleAuthorization.common.UserConstant;
+import com.roleAuthorization.model.JwtRequest;
+import com.roleAuthorization.model.JwtResponse;
 import com.roleAuthorization.model.User;
 import com.roleAuthorization.repository.UserRepository;
+import com.roleAuthorization.service.GroupUserDetailsService;
+import com.roleAuthorization.utility.JwtUtility;
 
 @RestController
 @RequestMapping("/user")
@@ -26,10 +33,16 @@ public class UserController {
 
 	@Autowired
 	private UserRepository repository;
+	
+	@Autowired
+	private AuthenticationManager authenticationManager;
 
 	@Autowired
+	private GroupUserDetailsService groupUserDetailsService;
+	/*
+	@Autowired
 	private BCryptPasswordEncoder passwordEncoder;
-
+*/
 	@GetMapping()
 	@PreAuthorize("hasAuthority('ROLE_ADMIN')")
 	public List<User> loadUser() {
@@ -41,7 +54,7 @@ public class UserController {
 	public String testUserAccess() {
 		return "User can only access this.";
 	}
-
+/*
 	@PostMapping("/join")
 	public String joinGroup(@RequestBody User user) {
 		user.setRoles(UserConstant.DEFAULT_ROLE);
@@ -50,7 +63,30 @@ public class UserController {
 		repository.save(user);
 		return "Hi " + user.getUserName() + " Welcome to group ";
 	}
+*/
 
+	@PostMapping("/authenticate")
+	public JwtResponse authenticate(@RequestBody JwtRequest jwtRequest) throws Exception {
+		 try {
+	            authenticationManager.authenticate(
+	                    new UsernamePasswordAuthenticationToken(
+	                            jwtRequest.getUsername(),
+	                            jwtRequest.getPassword()
+	                    )
+	            );
+	        } catch (BadCredentialsException e) {
+	            throw new Exception("INVALID_CREDENTIALS", e);
+	        }
+
+	        final UserDetails userDetails
+	                = groupUserDetailsService.loadUserByUsername(jwtRequest.getUsername());
+
+	        final String token =
+	                JwtUtility.generateToken(userDetails);
+
+	        return  new JwtResponse(token);
+	    }
+	
 	@GetMapping("/access/{userId}/{userRole}")
 	@PreAuthorize("hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MODERATOR')")
 	public String giveAccessToUser(@PathVariable int userId, @PathVariable String userRole, Principal principal) {
